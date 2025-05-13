@@ -1,0 +1,23 @@
+[package]
+name = "sap_gui_app"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+eframe = { version = "0.22", default-features = false, features = ["glow"] }
+egui = "0.22"
+crossbeam-channel = "0.5"
+tempfile = "3.3"
+anyhow = "1.0"
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = [
+    "winuser",
+    "windef",
+    "libloaderapi",
+    "shellapi",
+    "commctrl",
+    "errhandlingapi",
+    "handleapi",
+    "processthreadsapi"
+]}
