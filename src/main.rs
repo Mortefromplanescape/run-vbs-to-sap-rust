@@ -3,108 +3,127 @@ use eframe::egui;
 use crossbeam_channel::{bounded, Receiver, TryRecvError};
 use tempfile::NamedTempFile;
 use anyhow::Context;
+use egui::{TextEdit, ProgressBar};
 
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
-        initial_window_size: Some(egui::vec2(400.0, 200.0)),
+        initial_window_size: Some(egui::vec2(800.0, 600.0)),
         vsync: false,
         ..Default::default()
     };
 
     eframe::run_native(
-        "SAP GUI Automation",
+        "SAP GUI Automation Pro",
         options,
-        Box::new(|_cc| Box::new(MyApp::default())),
+        Box::new(|_cc| Box::new(MyApp::new())),
     )
 }
 
-#[derive(Default)]
 struct MyApp {
-    status: String,
-    receiver: Option<Receiver<anyhow::Result<String>>>,
+    script_content: String,
+    logs: Vec<String>,
+    receiver: Option<Receiver<anyhow::Result<()>>>,
+    progress: f32,
+    is_running: bool,
 }
 
 impl MyApp {
-    // пример скрипта для проверки
-    const VBS_SCRIPT: &'static str = r#"
-        If Not IsObject(application) Then
-		   Set SapGuiAuto  = GetObject("SAPGUI")
-		   Set application = SapGuiAuto.GetScriptingEngine
-		End If
-		If Not IsObject(connection) Then
-		   Set connection = application.Children(0)
-		End If
-		If Not IsObject(session) Then
-		   Set session    = connection.Children(0)
-		End If
-		If IsObject(WScript) Then
-		   WScript.ConnectObject session,     "on"
-		   WScript.ConnectObject application, "on"
-		End If
-		session.findById("wnd[0]").maximize
-		session.findById("wnd[0]/tbar[0]/okcd").text = "/nie01"
-		session.findById("wnd[0]").sendVKey 0
-		session.findById("wnd[0]/usr/ctxtRM63E-EQUNR").text = "10144765"
-		session.findById("wnd[0]/usr/ctxtRM63E-EQUNR").caretPosition = 8
-		session.findById("wnd[0]").sendVKey 0
-		session.findById("wnd[0]/usr/ctxtRM63E-EQUNR").text = "10044765"
-		session.findById("wnd[0]/usr/ctxtRM63E-EQUNR").caretPosition = 2
-		session.findById("wnd[0]").sendVKey 0
-		session.findById("wnd[0]/usr/ctxtRM63E-EQTYP").text = ""
-		session.findById("wnd[0]/usr/ctxtRM63E-EQTYP").setFocus
-		session.findById("wnd[0]/usr/ctxtRM63E-EQTYP").caretPosition = 0
-		session.findById("wnd[0]").sendVKey 4
-		session.findById("wnd[1]/usr/lbl[1,6]").setFocus
-		session.findById("wnd[1]/usr/lbl[1,6]").caretPosition = 0
-		session.findById("wnd[1]").sendVKey 2
-		session.findById("wnd[0]/usr/ctxtRM63E-EQUNR").text = "10144765"
-		session.findById("wnd[0]/usr/ctxtRM63E-EQUNR").setFocus
-		session.findById("wnd[0]/usr/ctxtRM63E-EQUNR").caretPosition = 3
-		session.findById("wnd[0]").sendVKey 0
-		session.findById("wnd[0]/usr/ctxtRM63E-EQUNR").text = ""
-		session.findById("wnd[0]/usr/ctxtRM63E-EQUNR").caretPosition = 0
-		session.findById("wnd[0]").sendVKey 0
-		session.findById("wnd[0]/tbar[0]/btn[15]").press
-		session.findById("wnd[1]/usr/btnSPOP-OPTION2").press
-		session.findById("wnd[0]/tbar[0]/btn[3]").press
-    "#;
+    fn new() -> Self {
+        Self {
+            script_content: String::from(r#"
+                ' Пример скрипта по умолчанию
+                If Not IsObject(application) Then
+                    Set SapGuiAuto = GetObject("SAPGUI")
+                    Set application = SapGuiAuto.GetScriptingEngine
+                End If
+                WScript.Echo "Скрипт выполнен!"
+            "#),
+            logs: Vec::new(),
+            receiver: None,
+            progress: 0.0,
+            is_running: false,
+        }
+    }
+
+    fn add_log(&mut self, log: String) {
+        self.logs.push(log);
+        if self.logs.len() > 100 {
+            self.logs.remove(0);
+        }
+    }
 }
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Проверка статуса выполнения
         if let Some(receiver) = &self.receiver {
             match receiver.try_recv() {
                 Ok(result) => {
-                    self.status = match result {
-                        Ok(msg) => format!("✅ {}", msg),
-                        Err(e) => format!("❌ Ошибка: {}", e),
-                    };
+                    self.is_running = false;
+                    self.progress = 0.0;
+                    match result {
+                        Ok(_) => self.add_log("✅ Скрипт успешно выполнен".into()),
+                        Err(e) => self.add_log(format!("❌ Ошибка: {}", e)),
+                    }
                     self.receiver = None;
                 }
-                Err(TryRecvError::Empty) => {}
+                Err(TryRecvError::Empty) => {
+                    self.progress = (self.progress + 0.01) % 1.0;
+                }
                 Err(TryRecvError::Disconnected) => {
-                    self.status = "⚠️ Поток выполнения прерван".to_string();
+                    self.add_log("⚠️ Соединение с потоком потеряно".into());
+                    self.is_running = false;
                     self.receiver = None;
                 }
             }
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("SAP Automation Tool");
+            ui.heading("SAP Automation Tool v2.0");
+            
+            ui.label("Редактор скрипта:");
+            egui::ScrollArea::vertical()
+                .max_height(300.0)
+                .show(ui, |ui| {
+                    TextEdit::multiline(&mut self.script_content)
+                        .font(egui::TextStyle::Monospace)
+                        .code_editor()
+                        .show(ui);
+                });
+
             ui.separator();
             
-            // Кнопка запуска
-            let button = ui.button("🚀 Запустить скрипт");
+            ui.horizontal(|ui| {
+                let button_text = if self.is_running { "⏹ Остановить" } else { "▶ Запуск" };
+                
+                if self.is_running {
+                    ui.add(
+                        ProgressBar::new(self.progress)
+                            .animate(true)
+                    );
+                }
+
+                if ui.button(button_text).clicked() {
+                    if !self.is_running {
+                        self.start_script();
+                    } else {
+                        self.is_running = false;
+                        self.add_log("⏹ Выполнение прервано пользователем".into());
+                    }
+                }
+            });
+
+            ui.separator();
             
-            if button.clicked() && self.receiver.is_none() {
-                self.start_script();
-            }
-            
-            // Статус
-            ui.label(&self.status);
-            
-            // Форсируем постоянную перерисовку
+            ui.label("Журнал выполнения:");
+            egui::ScrollArea::vertical()
+                .max_height(200.0)
+                .stick_to_bottom(true)
+                .show(ui, |ui| {
+                    for log in &self.logs {
+                        ui.monospace(log);
+                    }
+                });
+
             ctx.request_repaint();
         });
     }
@@ -112,15 +131,17 @@ impl eframe::App for MyApp {
 
 impl MyApp {
     fn start_script(&mut self) {
+        self.is_running = true;
+        self.progress = 0.0;
+        self.add_log("🚀 Запуск скрипта...".into());
+        
         let (sender, receiver) = bounded(1);
         self.receiver = Some(receiver);
         
-        let script = Self::VBS_SCRIPT.to_string();
+        let script = self.script_content.clone();
         
         std::thread::spawn(move || {
-            let result = execute_script(&script)
-                .map(|_| "Скрипт выполнен успешно".to_string());
-            
+            let result = execute_script(&script);
             let _ = sender.send(result);
         });
     }
