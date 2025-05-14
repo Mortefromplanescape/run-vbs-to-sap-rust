@@ -4,9 +4,11 @@ version = "0.3.0"
 edition = "2021"
 
 [dependencies]
+encoding_rs = "0.8"
 eframe = { version = "0.22", default-features = false, features = ["glow"] }
 egui = "0.22"
 crossbeam-channel = "0.5"
+image = "0.24"
 tempfile = "3.3"
 anyhow = "1.0"
 chrono = "0.4"

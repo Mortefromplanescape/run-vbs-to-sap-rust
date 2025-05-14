@@ -1,10 +1,35 @@
 use std::io::Write;
+use encoding_rs::{UTF_16LE, UTF_8};
 use eframe::egui;
 use crossbeam_channel::{bounded, Receiver, TryRecvError};
+use image::io::Reader as ImageReader;
 use tempfile::NamedTempFile;
 use anyhow::Context;
-use egui::{TextEdit, ProgressBar, Color32, text::LayoutJob, FontId};
+use egui::{TextEdit, ProgressBar, Color32, text::LayoutJob, FontId, ColorImage, TextureHandle};
 use chrono::Local;
+
+const MAIN_WINDOW_CAPTION: &str = r#"АО ПК "Азимут" клиент автоматизации SAP"#;
+const DEFAULT_SCRIPT: &str = r#"
+On Error Resume Next
+
+' Проверка установки SAP GUI
+Set SapGuiAuto = GetObject("SAPGUI")
+If Err.Number <> 0 Then
+    WScript.Echo "Error 01: SAP GUI not installed!"
+    WScript.Quit 1001
+End If
+
+' Проверка активной сессии
+Set application = SapGuiAuto.GetScriptingEngine
+If Err.Number <> 0 Then
+    WScript.Echo "Error 02: SAP scripting engine not available!"
+    WScript.Quit 1002
+End If
+
+' Пример простой операции
+WScript.Echo "Success: SAP GUI version " & application.Version
+WScript.Quit 0
+"#;
 
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
@@ -14,11 +39,11 @@ fn main() -> eframe::Result<()> {
     };
 
     eframe::run_native(
-        "SAP Automation Pro",
+        MAIN_WINDOW_CAPTION,
         options,
         Box::new(|cc| {
             cc.egui_ctx.set_visuals(egui::Visuals::dark());
-            Box::new(MyApp::new())
+            Box::new(MyApp::new(cc))
         }),
     )
 }
@@ -32,6 +57,7 @@ struct MyApp {
     selected_theme: usize,
     themes: Vec<&'static str>,
     scroll_to_bottom: bool,
+    icon_texture: Option<TextureHandle>,
 }
 
 #[derive(Clone)]
@@ -42,7 +68,31 @@ struct LogEntry {
 }
 
 impl MyApp {
-    fn new() -> Self {
+    fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        let icon_bytes = include_bytes!("../assets/logo.png");
+        
+        // Загрузка изображения
+        let icon_image = ImageReader::new(std::io::Cursor::new(icon_bytes))
+            .with_guessed_format()
+            .unwrap()
+            .decode()
+            .unwrap();
+        
+        // Конвертация в формат egui
+        let size = [icon_image.width() as usize, icon_image.height() as usize];
+        let icon_rgba = icon_image.to_rgba8();
+        let color_image = ColorImage::from_rgba_unmultiplied(
+            size,
+            &icon_rgba
+        );
+        
+        // Создание текстуры
+        let icon_texture = cc.egui_ctx.load_texture(
+            "app-icon", 
+            color_image, 
+            Default::default()
+        );
+
         Self {
             script_content: DEFAULT_SCRIPT.to_string(),
             logs: Vec::new(),
@@ -52,6 +102,7 @@ impl MyApp {
             selected_theme: 0,
             themes: vec!["Тёмная", "Светлая", "Синяя"],
             scroll_to_bottom: false,
+            icon_texture: Some(icon_texture),
         }
     }
 
@@ -79,6 +130,17 @@ impl MyApp {
     }
 
     fn start_script(&mut self) {
+        self.add_log("ℹ️ Создание временного файла...".into(), Color32::GRAY);
+        
+        let _temp_file = match NamedTempFile::new() {
+            Ok(f) => f,
+            Err(e) => {
+                self.add_log(format!("❌ Ошибка создания файла: {}", e), Color32::RED);
+                return;
+            }
+        };
+        
+        self.add_log("ℹ️ Запись скрипта...".into(), Color32::GRAY);
         self.is_running = true;
         self.progress = 0.0;
         self.add_log("🚀 Запуск скрипта...".to_string(), Color32::LIGHT_BLUE);
@@ -134,7 +196,15 @@ impl eframe::App for MyApp {
 
         egui::TopBottomPanel::top("header").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                ui.heading("SAP Automation Tool v4.0");
+                if let Some(icon) = &self.icon_texture {
+                    ui.image(icon, [256.0, 64.0]);
+                }
+                ui.separator();
+                ui.vertical(|ui| {
+                    ui.heading(MAIN_WINDOW_CAPTION);
+                    ui.label("v0.1");
+                });
+                
                 ui.separator();
                 ui.label("Тема:");
                 egui::ComboBox::from_id_source("theme_selector")
@@ -158,15 +228,20 @@ impl eframe::App for MyApp {
 
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.vertical(|ui| {
-                ui.label("VBScript Editor:");
-                egui::ScrollArea::vertical()
-                    .max_height(400.0)
-                    .show(ui, |ui| {
+            	// ui.horizontal(|ui| {
+                    ui.heading(MAIN_WINDOW_CAPTION);
+                    // ui.label("v0.1");
+                	ui.label("Редактор скрипта:");
+                	egui::ScrollArea::vertical()
+                    	.max_height(600.0)
+                    	.show(ui, |ui| {
                         TextEdit::multiline(&mut self.script_content)
                             .font(egui::TextStyle::Monospace)
                             .code_editor()
                             .show(ui);
-                    });
+                    	});
+                //     ui.separator();
+                // });
 
                 ui.separator();
                 
@@ -244,16 +319,29 @@ fn execute_script(script: &str) -> anyhow::Result<String> {
     let mut temp_file = NamedTempFile::new()
         .context("Failed to create temporary file")?;
     
+    temp_file.write_all(b"\xEF\xBB\xBF")?;
     temp_file.write_all(script.as_bytes())
         .context("Failed to write script")?;
     
+    let temp_path = temp_file.into_temp_path();
+    
     let output = std::process::Command::new("cscript.exe")
-        .args(&["//Nologo", &temp_file.path().to_string_lossy()])
+        .args(&["//Nologo", &temp_path.to_string_lossy()])
         .output()
         .context("Failed to execute cscript.exe")?;
     
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
+    let decode_with_bom = |bytes: &[u8]| {
+        if bytes.starts_with(b"\xFF\xFE") {
+            UTF_16LE.decode(&bytes[2..]).0.into_owned()
+        } else if bytes.starts_with(b"\xEF\xBB\xBF") {
+            UTF_8.decode(&bytes[3..]).0.into_owned()
+        } else {
+            String::from_utf8_lossy(bytes).into_owned()
+        }
+    };
+    
+    let stdout = decode_with_bom(&output.stdout);
+    let stderr = decode_with_bom(&output.stderr);
     
     let mut result = String::new();
     if !stdout.is_empty() {
@@ -269,26 +357,3 @@ fn execute_script(script: &str) -> anyhow::Result<String> {
         anyhow::bail!("Exit code: {}\n{}", output.status, result)
     }
 }
-
-const DEFAULT_SCRIPT: &str = r#"
-On Error Resume Next
-
-Set SapGuiAuto = GetObject("SAPGUI")
-If Err.Number <> 0 Then
-    WScript.Echo "Error: SAP GUI not found! Please start SAP Logon first."
-    WScript.Quit 1
-End If
-
-Set application = SapGuiAuto.GetScriptingEngine
-Set connection = application.Children(0)
-Set session = connection.Children(0)
-
-session.findById("wnd[0]").maximize
-WScript.Echo "Info: SAP window maximized"
-
-session.findById("wnd[0]/tbar[0]/okcd").text = "/n"
-session.findById("wnd[0]").sendVKey 0
-WScript.Echo "Success: Reset SAP session"
-
-WScript.Echo "Script completed successfully"
-"#;
