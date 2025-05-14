@@ -1,6 +1,6 @@
 [package]
-name = "sap_gui_app"
-version = "0.2.0"
+name = "sap_automation_tool"
+version = "0.3.0"
 edition = "2021"
 
 [dependencies]
@@ -9,6 +9,7 @@ egui = "0.22"
 crossbeam-channel = "0.5"
 tempfile = "3.3"
 anyhow = "1.0"
+chrono = "0.4"
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = [
