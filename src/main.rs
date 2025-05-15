@@ -9,8 +9,32 @@ use anyhow::Context;
 use egui::{TextEdit, ProgressBar, Color32, text::LayoutJob, FontId, ColorImage, TextureHandle};
 use chrono::Local;
 
-const MAIN_WINDOW_CAPTION: &str = r#"АО ПК "Азимут" клиент автоматизации SAP"#;
-const DEFAULT_SCRIPT: &str = r#"
+const APP_VERSION: &str = r#"v0.10"#;
+// const PATH_LOGO: &str = r#"../assets/logo.png"#;
+const LABEL_MAIN_WINDOW: &str = r#"АО ПК "Азимут" клиент автоматизации SAP"#;
+const LABEL_THEME: &str = r#"Тема"#;
+const LABEL_LOG: &str = r#"Журнал(лог) выполнения скрипта"#;
+const LABEL_EDITOR: &str = r#"Редактор скрипта"#;
+const BUTTON_RUN_SCRIPT: &str = r#"Запустить скрипт на выполнение (F5)"#;
+const BUTTON_STOP_SCRIPT: &str = r#"Остановить выполнение скрипта (Esc)"#;
+const BUTTON_COPY_LOGS: &str = r#"Копировать логи"#;
+const BUTTON_CLEAR_LOGS: &str = r#"Очистить логи"#;
+const ICON_OK: &str = r#"✅"#;
+const ICON_ERR: &str = r#"❌"#;
+const ICON_WARN: &str = r#"⚠️"#;
+const ICON_COPY: &str = r#"📋"#;
+const ICON_INFO: &str = r#"ℹ️"#;
+const ICON_RUN: &str = r#"🚀"#;
+const ICON_PLAY: &str = r#"▶"#;
+const ICON_STOP: &str = r#"⏹"#;
+const MSG_I_FILE_PATH: &str = r#"Путь к файлу"#;
+const MSG_I_FILE_SIZE: &str = r#"Размер скрипта в байтах"#;
+const MSG_I_FILE_CREATE: &str = r#"Создание временного файла..."#;
+const MSG_W_SCRIPT_MANUAL_STOPPED: &str = r#"Выполнение скрипта прервано пользователем"#;
+const MSG_W_THREAD_LOST: &str = r#"Соединение с потоком потеряно"#;
+const MSG_E_FILE_CREATE: &str = r#"Ошибка создания файла"#;
+const MSG_E_FILE_WRITE: &str = r#"Ошибка записи"#;
+const SCRIPT_DEFAULT: &str = r#"
 On Error Resume Next
 
 ' Проверка установки SAP GUI
@@ -40,7 +64,7 @@ fn main() -> eframe::Result<()> {
     };
 
     eframe::run_native(
-        MAIN_WINDOW_CAPTION,
+        LABEL_MAIN_WINDOW,
         options,
         Box::new(|cc| {
             cc.egui_ctx.set_visuals(egui::Visuals::dark());
@@ -85,7 +109,7 @@ impl MyApp {
         let icon_texture = cc.egui_ctx.load_texture("app-icon", color_image, Default::default());
 
         Self {
-            script_content: DEFAULT_SCRIPT.to_string(),
+            script_content: SCRIPT_DEFAULT.to_string(),
             logs: Vec::new(),
             receiver: None,
             progress: 0.0,
@@ -121,23 +145,23 @@ impl MyApp {
     }
 
     fn start_script(&mut self) {
-        self.add_log("ℹ️ Создание временного файла...".into(), Color32::GRAY);
+        self.add_log(MSG_I_FILE_CREATE.into(), Color32::GRAY);
         
         let temp_file = match NamedTempFile::new() {
             Ok(f) => f,
             Err(e) => {
-                self.add_log(format!("❌ Ошибка создания файла: {}", e), Color32::RED);
+                self.add_log(format!("{} {}: {}", ICON_ERR, MSG_E_FILE_CREATE, e), Color32::RED);
                 return;
             }
         };
         
         let temp_path = temp_file.into_temp_path();
-        self.add_log(format!("ℹ️ Путь к файлу: {}", temp_path.display()), Color32::GRAY);
+        self.add_log(format!("{} {}: {}", ICON_INFO, MSG_I_FILE_PATH, temp_path.display()), Color32::GRAY);
 
         let mut file = match std::fs::File::create(&temp_path) {
             Ok(f) => f,
             Err(e) => {
-                self.add_log(format!("❌ Ошибка записи файла: {}", e), Color32::RED);
+                self.add_log(format!("{} {}: {}", ICON_ERR, MSG_E_FILE_WRITE, e), Color32::RED);
                 return;
             }
         };
@@ -158,11 +182,11 @@ impl MyApp {
         }
 
         if let Err(e) = file.write_all(&content) {
-            self.add_log(format!("❌ Ошибка записи: {}", e), Color32::RED);
+            self.add_log(format!("{} {}: {}", ICON_ERR, MSG_E_FILE_WRITE, e), Color32::RED);
             return;
         }
 
-        self.add_log(format!("ℹ️ Размер скрипта: {} байт", content.len()), Color32::GRAY);
+        self.add_log(format!("{} {}: {}", ICON_INFO, MSG_I_FILE_SIZE, content.len()), Color32::GRAY);
         self.is_running = true;
         self.progress = 0.0;
         self.add_log("🚀 Запуск скрипта...".to_string(), Color32::LIGHT_BLUE);
@@ -191,16 +215,16 @@ impl eframe::App for MyApp {
                         Ok(output) => {
                             for line in output.lines() {
                                 let (color, text) = if line.contains("Error") {
-                                    (Color32::RED, format!("❌ {}", line))
+                                    (Color32::RED, format!("{} {}", ICON_ERR, line))
                                 } else if line.contains("Warning") {
-                                    (Color32::YELLOW, format!("⚠️ {}", line))
+                                    (Color32::YELLOW, format!("{} {}", ICON_WARN, line))
                                 } else {
-                                    (Color32::GREEN, format!("✅ {}", line))
+                                    (Color32::GREEN, format!("{} {}", ICON_OK, line))
                                 };
                                 self.add_log(text, color);
                             }
                         }
-                        Err(e) => self.add_log(format!("❌ {}", e), Color32::RED),
+                        Err(e) => self.add_log(format!("{} {}", ICON_ERR, e), Color32::RED),
                     }
                     self.receiver = None;
                 }
@@ -208,7 +232,7 @@ impl eframe::App for MyApp {
                     self.progress = (self.progress + 0.005) % 1.0;
                 }
                 Err(TryRecvError::Disconnected) => {
-                    self.add_log("⚠️ Соединение с потоком потеряно".into(), Color32::YELLOW);
+                    self.add_log(format!("{} {}", ICON_WARN, MSG_W_THREAD_LOST), Color32::YELLOW);
                     self.is_running = false;
                     self.receiver = None;
                 }
@@ -222,12 +246,12 @@ impl eframe::App for MyApp {
                 }
                 ui.separator();
                 ui.vertical(|ui| {
-                    ui.heading(MAIN_WINDOW_CAPTION);
-                    ui.label("v0.1");
+                    ui.heading(LABEL_MAIN_WINDOW);
+                    ui.label(APP_VERSION);
                 });
                 
                 ui.separator();
-                ui.label("Тема:");
+                ui.label(LABEL_THEME);
                 egui::ComboBox::from_id_source("theme_selector")
                     .selected_text(self.themes[self.selected_theme])
                     .show_ui(ui, |ui| {
@@ -236,7 +260,7 @@ impl eframe::App for MyApp {
                         }
                     });
                 ui.separator();
-                if ui.button("📋 Копировать логи").clicked() {
+                if ui.button(format!("{} {}", ICON_COPY, BUTTON_COPY_LOGS)).clicked() {
                     let logs: String = self.logs
                         .iter()
                         .map(|e| format!("{} {}", e.timestamp, e.text))
@@ -250,11 +274,11 @@ impl eframe::App for MyApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.vertical(|ui| {
                 // ui.horizontal(|ui| {
-                    ui.heading(MAIN_WINDOW_CAPTION);
+                    ui.heading(LABEL_MAIN_WINDOW);
                     // ui.label("v0.1");
-                    ui.label("Редактор скрипта:");
+                    ui.label(LABEL_EDITOR);
                     egui::ScrollArea::vertical()
-                        .max_height(600.0)
+                        .max_height(400.0)
                         .show(ui, |ui| {
                         TextEdit::multiline(&mut self.script_content)
                             .font(egui::TextStyle::Monospace)
@@ -268,9 +292,9 @@ impl eframe::App for MyApp {
                 
                 ui.horizontal(|ui| {
                     let button_text = if self.is_running { 
-                        "⏹ Остановить (Esc)" 
+                        format!("{} {}", ICON_STOP, BUTTON_STOP_SCRIPT)
                     } else { 
-                        "▶ Запуск (F5)" 
+                        format!("{} {}", ICON_PLAY, BUTTON_RUN_SCRIPT)
                     };
                     
                     if self.is_running {
@@ -288,19 +312,19 @@ impl eframe::App for MyApp {
                             self.start_script();
                         } else {
                             self.is_running = false;
-                            self.add_log("⏹ Выполнение прервано пользователем".into(), Color32::LIGHT_YELLOW);
+                            self.add_log(format!("{} {}", ICON_WARN, MSG_W_SCRIPT_MANUAL_STOPPED), Color32::LIGHT_YELLOW);
                         }
                     }
 
                     if ui.input(|i| i.key_pressed(egui::Key::Escape)) && self.is_running {
                         self.is_running = false;
-                        self.add_log("⏹ Выполнение прервано (Escape)".into(), Color32::LIGHT_YELLOW);
+                        self.add_log(format!("{} {}", ICON_WARN, MSG_W_SCRIPT_MANUAL_STOPPED), Color32::LIGHT_YELLOW);
                     }
                 });
 
                 ui.separator();
                 
-                ui.label("Execution Log:");
+                ui.label(LABEL_LOG);
                 egui::ScrollArea::vertical()
                     .id_source("log_scroll")
                     .max_height(300.0)
