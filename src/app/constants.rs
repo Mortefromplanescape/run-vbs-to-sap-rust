@@ -46,20 +46,54 @@ pub const SCRIPT_DEFAULT: &str = r#"
 On Error Resume Next
 
 ' Проверка установки SAP GUI
-Set SapGuiAuto = GetObject("SAPGUI")
-If Err.Number <> 0 Then
-    WScript.Echo "Error 01: SAP GUI не установлен!"
-    WScript.Quit 1001
-End If
+	Set SapGuiAuto = GetObject("SAPGUI")
+	If Err.Number <> 0 Then
+	    WScript.Echo "Error 01: SAP GUI не запущен или не установлен!"
+	    WScript.Quit 1001
+	End If
 
-' Проверка активной сессии
-Set application = SapGuiAuto.GetScriptingEngine
-If Err.Number <> 0 Then
-    WScript.Echo "Error 02: Scripting API недоступно!"
-    WScript.Quit 1002
-End If
-
-' Пример операции
-WScript.Echo "Успех: Версия SAP GUI " & application.Version
-WScript.Quit 0
+    If Not IsObject(application) Then
+	   Set SapGuiAuto  = GetObject("SAPGUI")
+	   Set application = SapGuiAuto.GetScriptingEngine
+	End If
+	If Not IsObject(connection) Then
+	   Set connection = application.Children(0)
+	End If
+	If Not IsObject(session) Then
+	   Set session    = connection.Children(0)
+	End If
+	If IsObject(WScript) Then
+	   WScript.ConnectObject session,     "on"
+	   WScript.ConnectObject application, "on"
+	End If
+	session.findById("wnd[0]").maximize
+	session.findById("wnd[0]/tbar[0]/okcd").text = "/nie01"
+	session.findById("wnd[0]").sendVKey 0
+	session.findById("wnd[0]/usr/ctxtRM63E-EQUNR").text = "10144765"
+	session.findById("wnd[0]/usr/ctxtRM63E-EQUNR").caretPosition = 8
+	session.findById("wnd[0]").sendVKey 0
+	session.findById("wnd[0]/usr/ctxtRM63E-EQUNR").text = "10044765"
+	session.findById("wnd[0]/usr/ctxtRM63E-EQUNR").caretPosition = 2
+	session.findById("wnd[0]").sendVKey 0
+	session.findById("wnd[0]/usr/ctxtRM63E-EQTYP").text = ""
+	session.findById("wnd[0]/usr/ctxtRM63E-EQTYP").setFocus
+	session.findById("wnd[0]/usr/ctxtRM63E-EQTYP").caretPosition = 0
+	session.findById("wnd[0]").sendVKey 4
+	session.findById("wnd[1]/usr/lbl[1,6]").setFocus
+	session.findById("wnd[1]/usr/lbl[1,6]").caretPosition = 0
+	session.findById("wnd[1]").sendVKey 2
+	session.findById("wnd[0]/usr/ctxtRM63E-EQUNR").text = "10144765"
 "#;
+
+
+// ' Проверка активной сессии
+// Set application = SapGuiAuto.GetScriptingEngine
+// If Err.Number <> 0 Then
+//     WScript.Echo "Error 02: Scripting API недоступно!"
+//     WScript.Quit 1002
+// End If
+
+// ' Пример операции
+// WScript.Echo "Успех: Версия SAP GUI " & application.Version
+// WScript.Quit 0
+// "#;

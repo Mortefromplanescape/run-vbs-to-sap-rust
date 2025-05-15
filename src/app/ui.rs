@@ -69,11 +69,14 @@ impl MyApp {
     }
 
     pub fn start_script(&mut self) {
-        use tempfile::NamedTempFile;
+        use tempfile::Builder;
         
         self.add_log(format!("{} {}", ICON_INFO, MSG_I_FILE_CREATING), Color32::GRAY);
         
-        let temp_file = match NamedTempFile::new() {
+        let temp_file = match Builder::new()
+            .suffix(".vbs")
+            .tempfile() 
+        {
             Ok(f) => f,
             Err(e) => {
                 self.add_log(format!("{} {}: {}", ICON_ERR, MSG_E_FILE_CREATE, e), Color32::RED);
