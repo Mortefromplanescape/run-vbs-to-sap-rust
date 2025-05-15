@@ -213,18 +213,13 @@ impl MyApp {
                 self.draw_title(ui);
                 ui.separator();
                 self.draw_theme_selector(ui);
-                ui.separator();
-                ui.vertical(|ui| {
-                    self.draw_copy_button(ui);
-                    self.draw_clear_button(ui);
-                });
             });
         });
     }
 
     fn draw_icon(&self, ui: &mut egui::Ui) {
         if let Some(icon) = &self.icon_texture {
-            ui.image(icon, [256.0, 64.0]);
+            ui.image(icon, [192.0, 48.0]);
         }
     }
 
@@ -269,24 +264,32 @@ impl MyApp {
     }
 
     fn draw_main_content(&mut self, ui: &mut egui::Ui) {
-        ui.vertical(|ui| {
+        ui.horizontal(|ui| {
+            
             self.draw_editor(ui);
-            self.draw_controls(ui);
+            // ui.set_height(600.0);
+            ui.separator();
+            
             self.draw_logs(ui);
         });
+        
     }
 
     fn draw_editor(&mut self, ui: &mut egui::Ui) {
-        ui.label(LABEL_EDITOR);
-        egui::ScrollArea::vertical()
-            .max_height(400.0)
-            .show(ui, |ui| {
-                TextEdit::multiline(&mut self.script_content)
-                    .font(egui::TextStyle::Monospace)
-                    .code_editor()
-                    .show(ui);
-            });
-        ui.separator();
+        ui.vertical(|ui| {
+            ui.label(LABEL_EDITOR);
+            egui::ScrollArea::vertical()
+                .max_height(320.0)
+                .show(ui, |ui| {
+                    TextEdit::multiline(&mut self.script_content)
+                        .desired_width(550.0)
+                        .font(egui::TextStyle::Monospace)
+                        .code_editor()
+                        .show(ui);
+                });
+            ui.separator();
+            self.draw_controls(ui);
+        });
     }
 
     fn draw_controls(&mut self, ui: &mut egui::Ui) {
@@ -302,7 +305,7 @@ impl MyApp {
             ui.add(
                 ProgressBar::new(self.progress)
                     .animate(true)
-                    .desired_width(200.0)
+                    .desired_width(300.0)
             );
         }
     }
@@ -341,16 +344,21 @@ impl MyApp {
     }
 
     fn draw_logs(&mut self, ui: &mut egui::Ui) {
-        ui.label(LABEL_LOG);
-        egui::ScrollArea::vertical()
-            .id_source(UI_TECH_LOG_SCROLL)
-            .max_height(300.0)
-            .stick_to_bottom(self.scroll_to_bottom)
-            .show(ui, |ui| {
-                for entry in &self.logs {
-                    ui.add(egui::Label::new(entry.to_layout_job()).sense(egui::Sense::click()));
-                }
-                self.scroll_to_bottom = false;
-            });
+        // ui.vertical(|ui| {
+            ui.label(LABEL_LOG);
+            egui::ScrollArea::vertical()
+                .id_source(UI_TECH_LOG_SCROLL)
+                .max_height(390.0)
+                .stick_to_bottom(self.scroll_to_bottom)
+                .show(ui, |ui| {
+                    for entry in &self.logs {
+                        ui.add(egui::Label::new(entry.to_layout_job()).sense(egui::Sense::click()));
+                    }
+                    self.scroll_to_bottom = false;
+                });
+                ui.separator();
+                self.draw_copy_button(ui);
+                self.draw_clear_button(ui);
+        // });
     }
 }

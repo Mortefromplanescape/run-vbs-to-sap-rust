@@ -3,13 +3,13 @@ pub const APP_LOG_FORMAT_STRING: &str = r#"%H:%M:%S%.3f"#;
 
 pub const LABEL_MAIN_WINDOW: &str = r#"АО ПК "Азимут" клиент автоматизации SAP"#;
 pub const LABEL_EDITOR: &str = r#"Область редактирования скрипта:"#;
-pub const LABEL_LOG: &str = r#"Журнал/лог выполнения скрипта:"#;
+pub const LABEL_LOG: &str = r#"Журнал выполнения скрипта:"#;
 pub const LABEL_THEME: &str = r#"Тема:"#;
 
 pub const BUTTON_STOP_SCRIPT: &str = r#"Остановить выполнение скрипта (Esc)"#;
 pub const BUTTON_RUN_SCRIPT: &str = r#"Запустить скрипт на выполнение (F5)"#;
-pub const BUTTON_COPY_LOGS: &str = r#"Копировать журнал/лог"#;
-pub const BUTTON_CLEAR_LOGS: &str = r#"Очистить журнал/лог"#;
+pub const BUTTON_COPY_LOGS: &str = r#"Копировать журнал"#;
+pub const BUTTON_CLEAR_LOGS: &str = r#"Очистить журнал"#;
 
 pub const ICON_OK: &str = r#"🗸"#; //✅
 pub const ICON_ERR: &str = r#"🗴"#; //❌
