@@ -29,7 +29,7 @@ impl MyApp {
             &icon_image.to_rgba8()
         );
         
-        let icon_texture = cc.egui_ctx.load_texture("app-icon", color_image, Default::default());
+        let icon_texture = cc.egui_ctx.load_texture(UI_TECH_APP_ICON, color_image, Default::default());
 
         Self {
             script_content: SCRIPT_DEFAULT.to_string(),
@@ -46,7 +46,7 @@ impl MyApp {
     pub fn add_log(&mut self, text: String, color: Color32) {
         use chrono::Local;
         
-        let timestamp = Local::now().format("%H:%M:%S%.3f").to_string();
+        let timestamp = Local::now().format(APP_LOG_FORMAT_STRING).to_string();
         self.logs.push(LogEntry { text, color, timestamp });
         self.scroll_to_bottom = true;
         if self.logs.len() > LOG_CAPACITY {
@@ -167,9 +167,9 @@ impl MyApp {
 
     fn process_success_output(&mut self, output: String) {
         for line in output.lines() {
-            let (color, text) = if line.contains("Error") {
+            let (color, text) = if line.contains(UI_TECH_ERROR) {
                 (Color32::RED, format!("{} {}", ICON_ERR, line))
-            } else if line.contains("Warning") {
+            } else if line.contains(UI_TECH_WARNING) {
                 (Color32::YELLOW, format!("{} {}", ICON_WARN, line))
             } else {
                 (Color32::GREEN, format!("{} {}", ICON_OK, line))
@@ -192,7 +192,7 @@ impl MyApp {
     }
 
     fn draw_ui(&mut self, ctx: &egui::Context) {
-        egui::TopBottomPanel::top("header").show(ctx, |ui| {
+        egui::TopBottomPanel::top(UI_TECH_HEADER).show(ctx, |ui| {
             self.draw_header(ui);
         });
 
@@ -202,11 +202,20 @@ impl MyApp {
     }
 
     fn draw_header(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            self.draw_icon(ui);
-            self.draw_title(ui);
-            self.draw_theme_selector(ui);
-            self.draw_copy_button(ui);
+        ui.vertical(|ui| {
+            ui.separator();
+            ui.horizontal(|ui| {
+                self.draw_icon(ui);
+                ui.separator();
+                self.draw_title(ui);
+                ui.separator();
+                self.draw_theme_selector(ui);
+                ui.separator();
+                ui.vertical(|ui| {
+                    self.draw_copy_button(ui);
+                    self.draw_clear_button(ui);
+                });
+            });
         });
     }
 
@@ -214,7 +223,6 @@ impl MyApp {
         if let Some(icon) = &self.icon_texture {
             ui.image(icon, [256.0, 64.0]);
         }
-        ui.separator();
     }
 
     fn draw_title(&self, ui: &mut egui::Ui) {
@@ -222,23 +230,32 @@ impl MyApp {
             ui.heading(LABEL_MAIN_WINDOW);
             ui.label(APP_VERSION);
         });
-        ui.separator();
     }
 
     fn draw_theme_selector(&mut self, ui: &mut egui::Ui) {
         ui.label(LABEL_THEME);
-        egui::ComboBox::from_id_source("theme_selector")
+        egui::ComboBox::from_id_source(UI_TECH_THEME_SELECTOR)
             .selected_text(THEMES[self.selected_theme])
             .show_ui(ui, |ui| {
                 for (i, theme) in THEMES.iter().enumerate() {
                     ui.selectable_value(&mut self.selected_theme, i, *theme);
                 }
             });
-        ui.separator();
     }
 
     fn draw_copy_button(&mut self, ui: &mut egui::Ui) {
         if ui.button(format!("{} {}", ICON_COPY, BUTTON_COPY_LOGS)).clicked() {
+            let logs: String = self.logs
+                .iter()
+                .map(|e| format!("{} {}", e.timestamp, e.text))
+                .collect::<Vec<_>>()
+                .join("\n");
+            ui.output_mut(|o| o.copied_text = logs);
+        }
+    }
+
+    fn draw_clear_button(&mut self, ui: &mut egui::Ui) {
+        if ui.button(format!("{} {}", ICON_CLEAR, BUTTON_CLEAR_LOGS)).clicked() {
             let logs: String = self.logs
                 .iter()
                 .map(|e| format!("{} {}", e.timestamp, e.text))
@@ -323,7 +340,7 @@ impl MyApp {
     fn draw_logs(&mut self, ui: &mut egui::Ui) {
         ui.label(LABEL_LOG);
         egui::ScrollArea::vertical()
-            .id_source("log_scroll")
+            .id_source(UI_TECH_LOG_SCROLL)
             .max_height(300.0)
             .stick_to_bottom(self.scroll_to_bottom)
             .show(ui, |ui| {
