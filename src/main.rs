@@ -1,6 +1,6 @@
 use std::io::Write;
-use encoding::all::WINDOWS_1251;
-use encoding::{DecoderTrap, Encoding};
+use chardetng::EncodingDetector;
+use encoding_rs::{Encoding, UTF_16LE};
 use eframe::egui;
 use crossbeam_channel::{bounded, Receiver, TryRecvError};
 use image::io::Reader as ImageReader;
@@ -148,8 +148,14 @@ impl MyApp {
             .flat_map(|c| c.to_le_bytes())
             .collect::<Vec<u8>>();
         
+        // Сохраняем скрипт в UTF-16LE с BOM
         let mut content = vec![0xFF, 0xFE]; // BOM для UTF-16LE
-        content.extend(script_bytes);
+        let script = self.script_content.replace('\n', "\r\n");
+        let script_utf16: Vec<u16> = script.encode_utf16().collect();
+        
+        for c in script_utf16 {
+            content.extend(c.to_le_bytes());
+        }
 
         if let Err(e) = file.write_all(&content) {
             self.add_log(format!("❌ Ошибка записи: {}", e), Color32::RED);
@@ -336,30 +342,38 @@ fn execute_script(temp_path: &std::path::Path) -> anyhow::Result<String> {
         .output()
         .context("Ошибка выполнения скрипта")?;
 
+    // Универсальный декодер с автоопределением кодировки
     let decode_output = |bytes: &[u8]| -> String {
-        // Попытка декодирования UTF-16LE
-        if bytes.len() >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE {
-            let utf16: Vec<u16> = bytes[2..]
-                .chunks(2)
-                .map(|c| u16::from_le_bytes([c[0], c[1]]))
-                .collect();
-            String::from_utf16(&utf16).unwrap_or_default()
-        } else {
-            // Декодирование Windows-1251 с обработкой русских символов
-            WINDOWS_1251.decode(bytes, DecoderTrap::Replace)
-                .unwrap_or_else(|_| String::from_utf8_lossy(bytes).into_owned())
+        // Проверка BOM для UTF-16LE
+        if bytes.starts_with(&[0xFF, 0xFE]) {
+            return UTF_16LE.decode(&bytes[2..]).0.into_owned();
         }
+
+        // Автоопределение кодировки
+        let mut detector = EncodingDetector::new();
+        detector.feed(bytes, true);
+        let encoding = detector.guess(None, true);
+
+        // Преобразование в соответствующую кодировку
+        let (decoded, _, _) = encoding.decode(bytes);
+        decoded.into_owned()
     };
 
-    let stdout = decode_output(&output.stdout).trim().to_string();
-    let stderr = decode_output(&output.stderr).trim().to_string();
+    let stdout = decode_output(&output.stdout);
+    let stderr = decode_output(&output.stderr);
+
+    // Очистка вывода от артефактов
+    let clean = |s: String| s.replace('\0', "")
+        .trim()
+        .replace("\r\n", "\n")
+        .to_string();
 
     let mut result = String::new();
     if !stdout.is_empty() {
-        result.push_str(&format!("[Вывод]\n{}\n", stdout));
+        result.push_str(&format!("[Вывод]\n{}\n", clean(stdout)));
     }
     if !stderr.is_empty() {
-        result.push_str(&format!("[Ошибки]\n{}\n", stderr));
+        result.push_str(&format!("[Ошибки]\n{}\n", clean(stderr)));
     }
     
     if output.status.success() {
