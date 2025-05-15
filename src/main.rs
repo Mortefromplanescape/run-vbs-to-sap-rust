@@ -1,5 +1,6 @@
 use std::io::Write;
-use encoding_rs::{UTF_16LE, UTF_8};
+use encoding::all::WINDOWS_1251;
+use encoding::{DecoderTrap, Encoding};
 use eframe::egui;
 use crossbeam_channel::{bounded, Receiver, TryRecvError};
 use image::io::Reader as ImageReader;
@@ -15,19 +16,19 @@ On Error Resume Next
 ' Проверка установки SAP GUI
 Set SapGuiAuto = GetObject("SAPGUI")
 If Err.Number <> 0 Then
-    WScript.Echo "Error 01: SAP GUI not installed!"
+    WScript.Echo "Error 01: SAP GUI не установлен!"
     WScript.Quit 1001
 End If
 
 ' Проверка активной сессии
 Set application = SapGuiAuto.GetScriptingEngine
 If Err.Number <> 0 Then
-    WScript.Echo "Error 02: SAP scripting engine not available!"
+    WScript.Echo "Error 02: Scripting API недоступно!"
     WScript.Quit 1002
 End If
 
-' Пример простой операции
-WScript.Echo "Success: SAP GUI version " & application.Version
+' Пример операции
+WScript.Echo "Успех: Версия SAP GUI " & application.Version
 WScript.Quit 0
 "#;
 
@@ -71,27 +72,17 @@ impl MyApp {
     fn new(cc: &eframe::CreationContext<'_>) -> Self {
         let icon_bytes = include_bytes!("../assets/logo.png");
         
-        // Загрузка изображения
         let icon_image = ImageReader::new(std::io::Cursor::new(icon_bytes))
             .with_guessed_format()
             .unwrap()
             .decode()
             .unwrap();
         
-        // Конвертация в формат egui
         let size = [icon_image.width() as usize, icon_image.height() as usize];
         let icon_rgba = icon_image.to_rgba8();
-        let color_image = ColorImage::from_rgba_unmultiplied(
-            size,
-            &icon_rgba
-        );
+        let color_image = ColorImage::from_rgba_unmultiplied(size, &icon_rgba);
         
-        // Создание текстуры
-        let icon_texture = cc.egui_ctx.load_texture(
-            "app-icon", 
-            color_image, 
-            Default::default()
-        );
+        let icon_texture = cc.egui_ctx.load_texture("app-icon", color_image, Default::default());
 
         Self {
             script_content: DEFAULT_SCRIPT.to_string(),
@@ -132,7 +123,7 @@ impl MyApp {
     fn start_script(&mut self) {
         self.add_log("ℹ️ Создание временного файла...".into(), Color32::GRAY);
         
-        let _temp_file = match NamedTempFile::new() {
+        let temp_file = match NamedTempFile::new() {
             Ok(f) => f,
             Err(e) => {
                 self.add_log(format!("❌ Ошибка создания файла: {}", e), Color32::RED);
@@ -140,7 +131,32 @@ impl MyApp {
             }
         };
         
-        self.add_log("ℹ️ Запись скрипта...".into(), Color32::GRAY);
+        let temp_path = temp_file.into_temp_path();
+        self.add_log(format!("ℹ️ Путь к файлу: {}", temp_path.display()), Color32::GRAY);
+
+        let mut file = match std::fs::File::create(&temp_path) {
+            Ok(f) => f,
+            Err(e) => {
+                self.add_log(format!("❌ Ошибка записи файла: {}", e), Color32::RED);
+                return;
+            }
+        };
+
+        // Подготовка контента с правильными переводами строк и кодировкой
+        let script = self.script_content.replace('\n', "\r\n");
+        let script_bytes = script.encode_utf16()
+            .flat_map(|c| c.to_le_bytes())
+            .collect::<Vec<u8>>();
+        
+        let mut content = vec![0xFF, 0xFE]; // BOM для UTF-16LE
+        content.extend(script_bytes);
+
+        if let Err(e) = file.write_all(&content) {
+            self.add_log(format!("❌ Ошибка записи: {}", e), Color32::RED);
+            return;
+        }
+
+        self.add_log(format!("ℹ️ Размер скрипта: {} байт", content.len()), Color32::GRAY);
         self.is_running = true;
         self.progress = 0.0;
         self.add_log("🚀 Запуск скрипта...".to_string(), Color32::LIGHT_BLUE);
@@ -148,10 +164,9 @@ impl MyApp {
         let (sender, receiver) = bounded(1);
         self.receiver = Some(receiver);
         
-        let script = self.script_content.clone();
-        
+        let script_path = temp_path.to_owned();
         std::thread::spawn(move || {
-            let result = execute_script(&script);
+            let result = execute_script(&script_path);
             let _ = sender.send(result);
         });
     }
@@ -228,18 +243,18 @@ impl eframe::App for MyApp {
 
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.vertical(|ui| {
-            	// ui.horizontal(|ui| {
+                // ui.horizontal(|ui| {
                     ui.heading(MAIN_WINDOW_CAPTION);
                     // ui.label("v0.1");
-                	ui.label("Редактор скрипта:");
-                	egui::ScrollArea::vertical()
-                    	.max_height(600.0)
-                    	.show(ui, |ui| {
+                    ui.label("Редактор скрипта:");
+                    egui::ScrollArea::vertical()
+                        .max_height(600.0)
+                        .show(ui, |ui| {
                         TextEdit::multiline(&mut self.script_content)
                             .font(egui::TextStyle::Monospace)
                             .code_editor()
                             .show(ui);
-                    	});
+                        });
                 //     ui.separator();
                 // });
 
@@ -315,45 +330,41 @@ impl eframe::App for MyApp {
     }
 }
 
-fn execute_script(script: &str) -> anyhow::Result<String> {
-    let mut temp_file = NamedTempFile::new()
-        .context("Failed to create temporary file")?;
-    
-    temp_file.write_all(b"\xEF\xBB\xBF")?;
-    temp_file.write_all(script.as_bytes())
-        .context("Failed to write script")?;
-    
-    let temp_path = temp_file.into_temp_path();
-    
+fn execute_script(temp_path: &std::path::Path) -> anyhow::Result<String> {    
     let output = std::process::Command::new("cscript.exe")
         .args(&["//Nologo", &temp_path.to_string_lossy()])
         .output()
-        .context("Failed to execute cscript.exe")?;
-    
-    let decode_with_bom = |bytes: &[u8]| {
-        if bytes.starts_with(b"\xFF\xFE") {
-            UTF_16LE.decode(&bytes[2..]).0.into_owned()
-        } else if bytes.starts_with(b"\xEF\xBB\xBF") {
-            UTF_8.decode(&bytes[3..]).0.into_owned()
+        .context("Ошибка выполнения скрипта")?;
+
+    let decode_output = |bytes: &[u8]| -> String {
+        // Попытка декодирования UTF-16LE
+        if bytes.len() >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE {
+            let utf16: Vec<u16> = bytes[2..]
+                .chunks(2)
+                .map(|c| u16::from_le_bytes([c[0], c[1]]))
+                .collect();
+            String::from_utf16(&utf16).unwrap_or_default()
         } else {
-            String::from_utf8_lossy(bytes).into_owned()
+            // Декодирование Windows-1251 с обработкой русских символов
+            WINDOWS_1251.decode(bytes, DecoderTrap::Replace)
+                .unwrap_or_else(|_| String::from_utf8_lossy(bytes).into_owned())
         }
     };
-    
-    let stdout = decode_with_bom(&output.stdout);
-    let stderr = decode_with_bom(&output.stderr);
-    
+
+    let stdout = decode_output(&output.stdout).trim().to_string();
+    let stderr = decode_output(&output.stderr).trim().to_string();
+
     let mut result = String::new();
     if !stdout.is_empty() {
-        result.push_str(&format!("Stdout:\n{}\n", stdout));
+        result.push_str(&format!("[Вывод]\n{}\n", stdout));
     }
     if !stderr.is_empty() {
-        result.push_str(&format!("Stderr:\n{}\n", stderr));
+        result.push_str(&format!("[Ошибки]\n{}\n", stderr));
     }
     
     if output.status.success() {
-        Ok(result)
+        Ok(result.trim().to_string())
     } else {
-        anyhow::bail!("Exit code: {}\n{}", output.status, result)
+        anyhow::bail!("Код ошибки: {}\n{}", output.status, result.trim())
     }
 }
