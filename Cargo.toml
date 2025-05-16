@@ -2,6 +2,7 @@
 name = "sap_automation_tool"
 version = "0.3.0"
 edition = "2021"
+build = "build.rs"
 
 [dependencies]
 chardetng = "0.1"
@@ -14,6 +15,9 @@ image = "0.24"
 tempfile = "3.3"
 anyhow = "1.0"
 chrono = "0.4"
+
+[target.'cfg(windows)'.build-dependencies]
+winres = "0.1.12"
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = [
