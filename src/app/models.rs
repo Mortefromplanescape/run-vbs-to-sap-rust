@@ -25,14 +25,14 @@ impl LogEntry {
 
     fn timestamp_format() -> eframe::egui::TextFormat {
         eframe::egui::TextFormat::simple(
-            FontId::monospace(13.0),
+            FontId::monospace(12.0),
             Color32::GRAY,
         )
     }
 
     fn text_format(color: Color32) -> eframe::egui::TextFormat {
         eframe::egui::TextFormat::simple(
-            FontId::monospace(13.0),
+            FontId::monospace(12.0),
             color,
         )
     }

@@ -11,25 +11,25 @@ pub struct MyApp {
     pub is_running: bool,
     pub selected_theme: usize,
     pub scroll_to_bottom: bool,
-    pub icon_texture: Option<TextureHandle>,
+    pub logo_texture: Option<TextureHandle>,
 }
 
 impl MyApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        let icon_bytes = include_bytes!("../../assets/logo.png");
-        let icon_image = image::io::Reader::new(std::io::Cursor::new(icon_bytes))
+        let logo_bytes = APP_LOGO; //include_bytes!("../../assets/logo.png");
+        let logo_image = image::io::Reader::new(std::io::Cursor::new(logo_bytes))
             .with_guessed_format()
             .unwrap()
             .decode()
             .unwrap();
         
-        let size = [icon_image.width() as usize, icon_image.height() as usize];
+        let size = [logo_image.width() as usize, logo_image.height() as usize];
         let color_image = ColorImage::from_rgba_unmultiplied(
             size,
-            &icon_image.to_rgba8()
+            &logo_image.to_rgba8()
         );
         
-        let icon_texture = cc.egui_ctx.load_texture(UI_TECH_APP_ICON, color_image, Default::default());
+        let logo_texture = cc.egui_ctx.load_texture(UI_TECH_APP_ICON, color_image, Default::default());
 
         Self {
             script_content: SCRIPT_DEFAULT.to_string(),
@@ -39,7 +39,7 @@ impl MyApp {
             is_running: false,
             selected_theme: DEFAULT_THEME_INDEX,
             scroll_to_bottom: false,
-            icon_texture: Some(icon_texture),
+            logo_texture: Some(logo_texture),
         }
     }
 
@@ -182,7 +182,7 @@ impl MyApp {
     }
 
     fn update_progress(&mut self) {
-        self.progress = (self.progress + PROGRESS_STEP) % 1.0;
+        self.progress = (self.progress + PROGRESS_STEP) % 1.05;
     }
 
     fn handle_thread_disconnect(&mut self) {
@@ -218,8 +218,8 @@ impl MyApp {
     }
 
     fn draw_icon(&self, ui: &mut egui::Ui) {
-        if let Some(icon) = &self.icon_texture {
-            ui.image(icon, [192.0, 48.0]);
+        if let Some(icon) = &self.logo_texture {
+            ui.image(icon, [224.0, 56.0]);
         }
     }
 

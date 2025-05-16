@@ -1,5 +1,6 @@
 pub const APP_VERSION: &str = r#"v0.10"#;
 pub const APP_LOG_FORMAT_STRING: &str = r#"%H:%M:%S%.3f"#;
+pub const APP_LOGO: &[u8; 2836] = include_bytes!("..\\..\\assets\\logo.png");
 
 pub const LABEL_MAIN_WINDOW: &str = r#"АО ПК "Азимут" клиент автоматизации SAP"#;
 pub const LABEL_EDITOR: &str = r#"Область редактирования скрипта:"#;
